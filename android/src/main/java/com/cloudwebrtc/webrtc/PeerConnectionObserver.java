@@ -513,6 +513,24 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
   @Override
   public void onAddTrack(RtpReceiver receiver, MediaStream[] mediaStreams) {
     Log.d(TAG, "onAddTrack");
+    // Dart can act on this track as soon as the events below reach it, and
+    // LiveKit does: it enables every track it subscribes to. onAddStream, until
+    // now the only place a remote track was registered, runs after EVERY track
+    // of the offer has been announced here. With two or more tracks in one
+    // offer, a lookup for the first therefore fell back to
+    // PeerConnection.getTransceivers() on the platform thread while this
+    // thread was calling it for the second (below). getTransceivers() disposes
+    // the wrappers it returned the time before, so each thread disposed the
+    // other's: an IllegalStateException under a native frame (abort at
+    // jvm.cc:81), a double release (SIGSEGV in nativeReleaseRef), or the
+    // platform thread stuck behind this one (ANR in mediaStreamTrackSetEnabled).
+    //
+    // Registered here, the track is found without that fallback. onAddStream
+    // replaces the entry with the stream's own wrapper of the same track.
+    MediaStreamTrack addedTrack = receiver.track();
+    if (addedTrack != null) {
+      remoteTracks.put(addedTrack.id(), addedTrack);
+    }
     // for plan-b
     for (MediaStream stream : mediaStreams) {
       String streamId = stream.getId();
