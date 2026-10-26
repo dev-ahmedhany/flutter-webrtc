@@ -243,6 +243,10 @@
   // Notify the Flutter new pixelBufferRef to be ready.
   dispatch_async(dispatch_get_main_queue(), ^{
     FlutterRTCVideoRenderer* strongSelf = weakSelf;
+    // The renderer can be freed before this block runs (the call ended and
+    // its view was disposed). A message to nil is harmless, but `->` on nil
+    // reads address 0x40: EXC_BAD_ACCESS on the main thread.
+    if (strongSelf == nil) return;
     if (!strongSelf->_isFirstFrameRendered) {
       if (strongSelf.eventSink) {
         strongSelf.eventSink(@{@"event" : @"didFirstFrameRendered"});
